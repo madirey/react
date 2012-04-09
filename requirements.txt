@@ -3,3 +3,4 @@ django-tastypie==0.9.11
 flickrapi==1.4.2
 numpy==1.6.1
 psycopg2==2.4.5
+scipy==0.10.1
