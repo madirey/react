@@ -5,9 +5,70 @@
         <script type="text/javascript" src="static/extjs/ext-debug.js"></script>
         <script type="text/javascript">
             Ext.Loader.setConfig({enabled: true}); 
+
+            Ext.require([
+                'Ext.data.*',
+                'Ext.util.*',
+                'Ext.view.View',
+            ]);
+
+            Ext.onReady(function() {
+
+                Ext.define('Image', {
+                    extend: 'Ext.data.Model',
+                    fields: [
+                        {name: 'id', type: 'string'},
+                        {name: 'resource_uri', type: 'string'},
+                        {name: 'source', type: 'string'}
+                    ]
+                });
+
+                var imageStore = new Ext.data.Store({
+                    model: Image,
+                    proxy: {
+                        type: 'rest',
+                        buildUrl: function(request) {
+                            var query = request.params.query;
+                            delete request.params.query;
+                            return 'api/v1/flickr/search/' + query; 
+                        },
+                        reader: {
+                            type: 'json',
+                            root: 'objects',
+                            fields: ['id', 'resource_uri', 'source']
+                        }
+                    }
+                });
+
+                var imageView = new Ext.DataView({
+                    store: imageStore,
+                    itemSelector: 'div',
+                    tpl: new Ext.XTemplate(
+                        '<tpl for=".">',
+                            '<div style="float:left">',
+                                '<img src="{resource_uri}" alt="{source} document"/>',
+                            '</div>',
+                        '</tpl>'
+                    )
+                });
+
+                var panel = new Ext.Panel({
+                    id: 'images-panel',
+                    //width: 520,
+                    //height: 200,
+                    layout: 'auto',
+                    items: [imageView],
+                    renderTo: 'panel'
+                });
+
+                imageStore.load({params: { query: 'eagle' }});
+
+            });
         </script>
     </head> 
     <body>
+        <div id="panel">
 
+        </div>
     </body>
 </html>

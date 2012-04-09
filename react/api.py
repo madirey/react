@@ -40,8 +40,8 @@ class FlickrResource(Resource):
 
     def override_urls(self):
         return [
-            url(r'^(?P<resource_name>%s)/search/(?P<query>\w+)%s$' %
-                (self._meta.resource_name, trailing_slash()), self.wrap_view('get_search'), name='api_get_search'),
+            url(r'^(?P<resource_name>%s)/search/(?P<query>\w+)' %
+                (self._meta.resource_name), self.wrap_view('get_search'), name='api_get_search'),
         ]
 
     def _output_adapter(self, obj):
@@ -69,7 +69,7 @@ class FlickrResource(Resource):
         return self.create_response(request, object_list) 
 
     def get_resource_uri(self, bundle_or_obj):
-        return ''
+        return bundle_or_obj.data.get('url', '')
 
     def get_object_list(self, request):
         return [doc1, doc2, doc3]
