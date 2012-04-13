@@ -1,4 +1,6 @@
+from django.conf import settings
 from django.conf.urls import patterns, include, url
+from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 from tastypie.api import Api
 from react import views
 from react.api import FlickrResource
@@ -12,7 +14,7 @@ v1_api.register(FlickrResource())
 
 urlpatterns = patterns('',
     (r'^api/', include(v1_api.urls)),
-    (r'^', views.home),
+    (r'^$', views.home),
 
     # Uncomment the admin/doc line below to enable admin documentation:
     # url(r'^admin/doc/', include('django.contrib.admindocs.urls')),
@@ -20,3 +22,8 @@ urlpatterns = patterns('',
     # Uncomment the next line to enable the admin:
     # url(r'^admin/', include(admin.site.urls)),
 )
+
+urlpatterns += staticfiles_urlpatterns()
+#if settings.DEBUG:
+#    urlpatterns += patterns('',
+#        (r''^static

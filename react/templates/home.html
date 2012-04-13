@@ -1,16 +1,29 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <link rel="stylesheet" type="text/css" href="extjs/resources/css/ext-all.css"/>
-        <script type="text/javascript" src="static/extjs/ext-debug.js"></script>
-        <script type="text/javascript">
-            Ext.Loader.setConfig({enabled: true}); 
+        <link rel="stylesheet" type="text/css" href="static/extjs/resources/css/ext-all.css"/>
+        <style type="text/css">
+            div#centerPane {
+                margin: 0 auto;
+                text-align: center;
+            }
 
-            Ext.require([
-                'Ext.data.*',
-                'Ext.util.*',
-                'Ext.view.View',
-            ]);
+            div#northPane {
+                padding: 5px;
+                text-align: center;
+                vertical-align: middle;
+            }
+
+            .resize {
+                max-width: 200px;
+                width: expression(this.width > 100 ? 100 : true);
+                height: auto;
+            }
+        </style>
+        <script type="text/javascript" src="static/extjs/ext-debug.js"></script>
+        <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
+        <script type="text/javascript">
+            Ext.require(['*']);
 
             Ext.onReady(function() {
 
@@ -40,35 +53,91 @@
                     }
                 });
 
+                var searchStore = Ext.data.Store({
+                    fields: ['query'],
+                    data: [
+                        
+                    ]
+                });
+
                 var imageView = new Ext.DataView({
                     store: imageStore,
                     itemSelector: 'div',
+                    emptyText: 'No images to display',
                     tpl: new Ext.XTemplate(
                         '<tpl for=".">',
-                            '<div style="float:left; width: ">',
-                                '<img src="{resource_uri}" alt="{source} document"/>',
+                            '<div style="display:inline; padding: 5px;">',
+                                '<img src="{resource_uri}" width="200" height="200" alt="{source} document"/>',
                             '</div>',
                         '</tpl>'
                     )
                 });
 
-                var panel = new Ext.Panel({
-                    id: 'images-panel',
-                    //width: 520,
-                    //height: 200,
-                    layout: 'auto',
-                    items: [imageView],
-                    renderTo: 'panel'
+                Ext.create('Ext.Viewport', {
+                    layout: {
+                        type: 'border',
+                        padding: 5
+                    },
+                    defaults: {
+                        split: true
+                    },
+                    items: [
+                        {
+                            region: 'north',
+                            id: 'northPane',
+                            height: 100,
+                            items: [
+                                {
+                                    xtype: 'combo',
+                                    id: 'searchBox',
+                                    store: searchStore,
+                                    displayField: 'query',
+                                    valueField: 'query',
+                                    queryMode: 'local',
+                                    emptyText: 'Search...',
+                                    hideTrigger: true,
+                                    listeners: {
+                                        specialkey: function(f, e) {
+                                            if(e.getKey() == e.ENTER) {
+                                                imageStore.load({params: { query: Ext.getCmp('searchBox').getValue() }});
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            region: 'west',
+                            width: '15%',
+                            collapsible: true,
+                            html: 'relevant picks'
+                        },
+                        {
+                            region: 'east',
+                            width: '15%',
+                            collapsible: true,
+                            html: 'irrelevant'
+                        },
+                        {
+                            region: 'south',
+                            height: 40,
+                            style: 'text-align: center',
+                            html: 'Copyright &copy; 2012 Matt Caldwell'
+                        },
+                        {
+                            region: 'center',
+                            id: 'centerPane',
+                            autoScroll: true,
+                            width: 800,
+                            items: imageView
+                        }
+                    ]
                 });
 
-                imageStore.load({params: { query: 'eagle' }});
+                //imageStore.load({params: { query: 'eagle' }});
 
             });
         </script>
     </head> 
-    <body>
-        <div id="panel">
-
-        </div>
-    </body>
+    <body></body>
 </html>
