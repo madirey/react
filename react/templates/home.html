@@ -124,7 +124,7 @@
                         buildUrl: function(request) {
                             var query = request.params.query;
                             delete request.params.query;
-                            return 'api/v1/flickr/search/' + query; 
+                            return 'api/v1/flickr/search/' + query + '?format=json'; 
                         },
                         reader: {
                             type: 'json',

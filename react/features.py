@@ -1,6 +1,6 @@
 import numpy as np, urllib2
 from django.conf import settings
-from scipy import ndimage
+#from scipy import ndimage
 
 try:
     from cStringIO import StringIO
