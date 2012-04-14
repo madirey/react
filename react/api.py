@@ -51,7 +51,9 @@ class FlickrResource(Resource):
 
     def get_search(self, request, **kwargs):
         query  = kwargs.pop('query')
-        results = flickr.photos_search(tags=query)[0]
+        page   = request.GET.get('page', 1)
+        per_page = request.GET.get('limit', 20)
+        results = flickr.photos_search(tags=query, page=str(page), per_page=str(per_page))[0]
 
         paginator = Paginator(request.GET, results, resource_uri='/api/v1/flickr/search/')
 

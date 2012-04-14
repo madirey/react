@@ -8,22 +8,98 @@
                 text-align: center;
             }
 
-            div#northPane {
-                padding: 5px;
-                text-align: center;
-                vertical-align: middle;
+            div#searchBox input {
+                height: 40px;
+                margin: 28px 0;
             }
 
-            .resize {
-                max-width: 200px;
-                width: expression(this.width > 100 ? 100 : true);
-                height: auto;
+            .docDisplay {
+                position: relative;
+                display: inline;
+                padding: 5px;
+            }
+
+            .relevance {
+                position: absolute;
+                display: none;
+                bottom: 5px;
+                right: 5px;
+                padding: 5px;
+                height: 30px;
+                width: 60px;
+            }
+
+            .relevance .overlay-left {
+                float: left;
+                margin-bottom: 4px;
+            }
+
+            .relevance .overlay-right {
+                float: left;
+                margin-left: 10px;
+            }
+
+            .relevance doc {
+                cursor: hand;
+                cursor: pointer;
+            }
+
+            .relevantDoc {
+                position: relative;
+            }
+
+            .remove {
+                position: absolute;
+                display: none;
+                top: 0;
+                left: 0;
             }
         </style>
         <script type="text/javascript" src="static/extjs/ext-debug.js"></script>
         <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
         <script type="text/javascript">
             Ext.require(['*']);
+
+            var documentStore;
+            var relevanceStore;
+            
+            function markRelevant(id) {
+                unmarkRelevance(id);
+                var doc = documentStore.findRecord('id', id);
+                relevanceStore.add({id: doc.data.id, resource_uri: doc.data.resource_uri, relevant: true});
+            }
+
+            function markIrrelevant(id, url) {
+                unmarkRelevance(id);
+                var doc = documentStore.findRecord('id', id);
+                relevanceStore.add({id: doc.data.id, resource_uri: doc.data.resource_uri, relevant: false});
+            }
+
+            function unmarkRelevance(id) {
+                var doc = relevanceStore.findRecord('id', id);
+                if(doc) {
+                    relevanceStore.remove([doc]);
+                }
+            }
+
+            function onLoadCallback() {
+                $('div.docDisplay').mouseenter(function() {
+                    $(this).find('.relevance').show();
+                });
+                $('div.docDisplay').mouseleave(function() {
+                    $(this).find('.relevance').hide();
+                });
+                $('#centerPane').find('p').replaceWith('<p style="margin: 5px auto; font-size: 1.5em">Showing results for: '+localStorage.query+'</p>');
+            }
+
+            function onRelevanceChange() {
+                $('div.relevantDoc,div.irrelevantDoc').mouseenter(function() {
+                    $(this).find('.remove').show();
+                });
+                $('div.relevantDoc,div.irrelevantDoc').mouseleave(function() {
+                    $(this).find('.remove').hide();
+                });
+            }
 
             Ext.onReady(function() {
 
@@ -33,11 +109,15 @@
                         {name: 'id', type: 'string'},
                         {name: 'resource_uri', type: 'string'},
                         {name: 'source', type: 'string'}
-                    ]
+                    ],
                 });
 
-                var imageStore = new Ext.data.Store({
-                    model: Image,
+                relevanceStore = new Ext.data.ArrayStore({
+                    fields: ['id', 'resource_uri', 'relevant']
+                });
+
+                documentStore = new Ext.data.Store({
+                    model: 'Image',
                     proxy: {
                         type: 'rest',
                         buildUrl: function(request) {
@@ -47,8 +127,7 @@
                         },
                         reader: {
                             type: 'json',
-                            root: 'objects',
-                            fields: ['id', 'resource_uri', 'source']
+                            root: 'objects'
                         }
                     }
                 });
@@ -60,14 +139,19 @@
                     ]
                 });
 
-                var imageView = new Ext.DataView({
-                    store: imageStore,
-                    itemSelector: 'div',
-                    emptyText: 'No images to display',
+                var documentView = new Ext.DataView({
+                    store: documentStore,
+                    itemSelector: 'div.docDisplay',
+                    emptyText: 'No documents to display',
                     tpl: new Ext.XTemplate(
+                        '<p style="margin: 5px auto; font-size: 1.5em">Showing results for: '+localStorage.query+'</p>',
                         '<tpl for=".">',
-                            '<div style="display:inline; padding: 5px;">',
-                                '<img src="{resource_uri}" width="200" height="200" alt="{source} document"/>',
+                            '<div class="docDisplay">',
+                                '<a href="{resource_uri}" target="_blank"><img src="{resource_uri}" width="200" height="200" alt="{source} document"/></a>',
+                                '<div class="relevance">',
+                                    '<a href="javascript:markRelevant(\'{id}\')"><img src="static/img/relevant.png" class="overlay-left relevant" width="20" height="20" alt="relevant document"/></a>',
+                                    '<a href="javascript:markIrrelevant(\'{id}\')"><img src="static/img/irrelevant.png" class="overlay-right irrelevant" width="20" height="20" alt="irrelevant document"/></a>',
+                                '</div>',
                             '</div>',
                         '</tpl>'
                     )
@@ -90,6 +174,8 @@
                                 {
                                     xtype: 'combo',
                                     id: 'searchBox',
+                                    width: 400,
+                                    style: 'margin: 0 auto; text-align: center;',
                                     store: searchStore,
                                     displayField: 'query',
                                     valueField: 'query',
@@ -99,7 +185,10 @@
                                     listeners: {
                                         specialkey: function(f, e) {
                                             if(e.getKey() == e.ENTER) {
-                                                imageStore.load({params: { query: Ext.getCmp('searchBox').getValue() }});
+                                                var searchBox = Ext.getCmp('searchBox');
+                                                localStorage.query = searchBox.getValue();
+                                                documentStore.load({params: { query: localStorage.query }, callback: onLoadCallback});
+                                                searchBox.setValue('');
                                             }
                                         }
                                     }
@@ -108,15 +197,65 @@
                         },
                         {
                             region: 'west',
+                            title: 'Relevant documents',
                             width: '15%',
                             collapsible: true,
-                            html: 'relevant picks'
+                            autoScroll: true,
+                            items: {
+                                xtype: 'dataview',
+                                id: 'westPane', 
+                                store: relevanceStore,
+                                itemSelector: 'div.relevantDoc',
+                                emptyText: 'No relevant documents',
+                                tpl: new Ext.XTemplate(
+                                    '<tpl for=".">',
+                                        '<tpl if="relevant==true">',
+                                            '<div class="relevantDoc">',
+                                                '<img src="{resource_uri}" width="100%" height="200"/>',
+                                                '<div class="remove">',
+                                                    '<a href="javascript:unmarkRelevance(\'{id}\')" alt="remove"><img src="static/img/remove.png" width="100%" height="200"/></a>',
+                                                '</div>',
+                                            '</div>',
+                                        '</tpl>',
+                                    '</tpl>'
+                                ),
+                                listeners: {
+                                    refresh: function() {
+                                        onRelevanceChange();
+                                    }
+                                }
+                            },
                         },
                         {
                             region: 'east',
+                            title: 'Irrelevant documents',
                             width: '15%',
                             collapsible: true,
-                            html: 'irrelevant'
+                            autoScroll: true,
+                            items: {
+                                xtype: 'dataview',
+                                id: 'eastPane',
+                                store: relevanceStore,
+                                itemSelector: 'div.irrelevantDoc',
+                                emptyText: 'No irrelevant documents',
+                                tpl: new Ext.XTemplate(
+                                    '<tpl for=".">',
+                                        '<tpl if="relevant==false">',
+                                            '<div class="irrelevantDoc">',
+                                                '<img src="{resource_uri}" width="100%" height="200"/>',
+                                                '<div class="remove">',
+                                                    '<a href="javascript:unmarkRelevance(\'{id}\')" alt="remove"><img src="static/img/remove.png" width="100%" height="200"/></a>',
+                                                '</div>',
+                                            '</div>',
+                                        '</tpl>',
+                                    '</tpl>'
+                                ),
+                                listeners: {
+                                    refresh: function() {
+                                        onRelevanceChange();
+                                    }
+                                }
+                            },
                         },
                         {
                             region: 'south',
@@ -127,14 +266,25 @@
                         {
                             region: 'center',
                             id: 'centerPane',
+                            frame: true,
                             autoScroll: true,
                             width: 800,
-                            items: imageView
+                            items: documentView,
+                            listeners: {
+                                afterrender: function(panel) {
+                                    panel.body.on('scroll', function(scrollerObj, offsetObj) {
+                                        if(scrollerObj.target.offsetHeight + scrollerObj.target.scrollTop >= scrollerObj.target.scrollHeight) {
+                                            documentStore.nextPage({ params: { query: localStorage.query }, addRecords: true, callback: onLoadCallback });
+                                        }
+                                    });
+                                }
+                            }
                         }
                     ]
                 });
 
-                //imageStore.load({params: { query: 'eagle' }});
+                if(localStorage.query)
+                    documentStore.load({params: { query: localStorage.query }, callback: onLoadCallback });
 
             });
         </script>
