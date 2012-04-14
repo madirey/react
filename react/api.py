@@ -1,10 +1,10 @@
 from django.conf.urls.defaults import *
 from django.core.cache import cache
+from react import features
 from tastypie import fields
 from tastypie.authorization import Authorization
 from tastypie.paginator import Paginator
 from tastypie.resources import Resource
-from tastypie.utils import trailing_slash
 import flickrapi, hashlib
 
 
@@ -15,15 +15,6 @@ class DocumentObject(object):
         self.url         = kwargs.get('url', None) 
         self.id          = hashlib.sha1(self.url).hexdigest()
         self.features    = { 'hsv_histogram': [] }
-
-# begin testing
-doc1 = DocumentObject(url='http://foobar1.com')
-doc2 = DocumentObject(url='http://foobar2.com')
-doc3 = DocumentObject(url='http://foobar3.com')
-cache.set(doc1.id, doc1)
-cache.set(doc2.id, doc2)
-cache.set(doc3.id, doc3)
-# end testing
 
 flickr = flickrapi.FlickrAPI('2de139a8b38bf796c0a9d3eaccda137f', cache=True)
 
@@ -49,14 +40,32 @@ class FlickrResource(Resource):
             (obj.get('farm'), obj.get('server'), obj.get('id'), obj.get('secret'))
         return DocumentObject(source='flickr', url=url)
 
+    def _get_document_url(self, results, id):
+        for obj in results:
+            doc = self._output_adapter(obj)
+            if id == doc.id:
+                return doc.url
+        return None
+
     def get_search(self, request, **kwargs):
         query  = kwargs.pop('query')
+        source = 'flickr'
+        relevant_docs = request.GET.getlist('relevant')
+        irrelevant_docs = request.GET.getlist('irrelevant')
         page   = request.GET.get('page', 1)
         per_page = request.GET.get('limit', 20)
         results = flickr.photos_search(tags=query, page=str(page), per_page=str(per_page))[0]
 
-        paginator = Paginator(request.GET, results, resource_uri='/api/v1/flickr/search/')
+        for doc_id in relevant_docs:
+            cache_key = '%s-%s' % (source, doc_id)
+            feature_vector = cache.get(cache_key)
+            if not feature_vector:
+                features.extract_features(cache_key, self._get_document_url(results, doc_id))
 
+        for doc_id in irrelevant_docs:
+            pass
+
+        paginator = Paginator(request.GET, results, resource_uri='/api/v1/flickr/search/')
         bundles = []
         for result in paginator.page()['objects']: 
             bundle = self.build_bundle(obj=self._output_adapter(result), request=request)
@@ -74,7 +83,7 @@ class FlickrResource(Resource):
         return bundle_or_obj.data.get('url', '')
 
     def get_object_list(self, request):
-        return [doc1, doc2, doc3]
+        return []
 
     def obj_get_list(self, request=None, **kwargs):
         return self.get_object_list(request)
