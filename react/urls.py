@@ -3,7 +3,7 @@ from django.conf.urls import patterns, include, url
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 from tastypie.api import Api
 from react import views
-from react.api import FlickrResource
+from react.api import FlickrResource, SourceResource
 
 # Uncomment the next two lines to enable the admin:
 # from django.contrib import admin
@@ -11,6 +11,7 @@ from react.api import FlickrResource
 
 v1_api = Api(api_name='v1')
 v1_api.register(FlickrResource())
+v1_api.register(SourceResource())
 
 urlpatterns = patterns('',
     (r'^api/', include(v1_api.urls)),
@@ -24,6 +25,3 @@ urlpatterns = patterns('',
 )
 
 urlpatterns += staticfiles_urlpatterns()
-#if settings.DEBUG:
-#    urlpatterns += patterns('',
-#        (r''^static

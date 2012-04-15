@@ -8,21 +8,60 @@ from tastypie.resources import Resource
 import flickrapi, hashlib
 
 
+class SourceObject(object):
+    def __init__(self, **kwargs):
+        self.name = kwargs.get('name', None)
+        self.features = kwargs.get('features', None)
+
+flickr_source = SourceObject(name='flickr', features=['rgb_histogram'])
+available_sources = {
+    'flickr': flickr_source,
+}
+
+class SourceResource(Resource):
+    name      = fields.CharField(attribute='name')
+    features  = fields.ListField(attribute='features')
+
+    class Meta:
+        resource_name = 'source'
+        object_class = SourceObject
+        authorization = Authorization()
+
+    def override_urls(self):
+        return [
+            url(r'^(?P<resource_name>%s)/(?P<source>\w+)' %
+                (self._meta.resource_name), self.wrap_view('obj_get'), name='source_info'),
+        ]
+
+    def get_resource_uri(self, bundle_or_obj):
+        return '/api/v1/%s/%s/' % (self._meta.resource_name, bundle_or_obj.obj.name)
+
+    def get_object_list(self, request):
+        return [flickr_source]
+
+    def obj_get_list(self, request=None, **kwargs):
+        return self.get_object_list(request)
+
+    def obj_get(self, request=None, **kwargs):
+        source = available_sources[kwargs['source']]
+        return self.create_response(request, {
+            'name': source.name,
+            'features': [{'name': f} for f in source.features]})
+
 class DocumentObject(object):
     def __init__(self, **kwargs):
+        self.url         = kwargs.get('url', None)
+        self.id          = kwargs.get('id', None) 
         self.source      = kwargs.get('source', None) 
-        self.relevant    = kwargs.get('relevant', True)
-        self.url         = kwargs.get('url', None) 
-        self.id          = hashlib.sha1(self.url).hexdigest()
-        self.features    = { 'hsv_histogram': [] }
+        self.features    = []
 
 flickr = flickrapi.FlickrAPI('2de139a8b38bf796c0a9d3eaccda137f', cache=True)
 
 class FlickrResource(Resource):
     id       = fields.CharField(attribute='id')
-    relevant = fields.BooleanField(attribute='relevant')
     source   = fields.CharField(attribute='source')
     url      = fields.FileField(attribute='url')
+    features = fields.ListField(attribute='features')
 
     class Meta:
         resource_name = 'flickr'
@@ -35,35 +74,31 @@ class FlickrResource(Resource):
                 (self._meta.resource_name), self.wrap_view('get_search'), name='api_get_search'),
         ]
 
-    def _output_adapter(self, obj):
-        url = 'http://farm%s.staticflickr.com/%s/%s_%s.jpg' % \
+    def _get_url(self, obj):
+        return 'http://farm%s.staticflickr.com/%s/%s_%s.jpg' % \
             (obj.get('farm'), obj.get('server'), obj.get('id'), obj.get('secret'))
-        return DocumentObject(source='flickr', url=url)
 
-    def _get_document_url(self, results, id):
-        for obj in results:
-            doc = self._output_adapter(obj)
-            if id == doc.id:
-                return doc.url
-        return None
+    def _output_adapter(self, obj):
+        return DocumentObject(id=obj.get('id'), source='flickr', url=self._get_url(obj))
 
     def get_search(self, request, **kwargs):
         query  = kwargs.pop('query')
         source = 'flickr'
         relevant_docs = request.GET.getlist('relevant')
         irrelevant_docs = request.GET.getlist('irrelevant')
+        feature = request.GET.get('feature')
         page   = request.GET.get('page', 1)
         per_page = request.GET.get('limit', 20)
         results = flickr.photos_search(tags=query, page=str(page), per_page=str(per_page))[0]
 
-        for doc_id in relevant_docs:
-            cache_key = '%s-%s' % (source, doc_id)
-            feature_vector = cache.get(cache_key)
-            if not feature_vector:
-                features.extract_features(cache_key, self._get_document_url(results, doc_id))
+        for photo in results:
+            url = self._get_url(photo)
+            cache_key = '%s-%s' % (source, photo.get('id'))
+            feature_vectors = cache.get(cache_key)
+            if not feature_vectors:
+                features.extract_features(cache_key, url)
 
-        for doc_id in irrelevant_docs:
-            pass
+        results = features.filter(results, source, relevant_docs, irrelevant_docs, feature)
 
         paginator = Paginator(request.GET, results, resource_uri='/api/v1/flickr/search/')
         bundles = []

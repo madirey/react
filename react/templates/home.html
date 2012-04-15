@@ -8,11 +8,21 @@
                 text-align: center;
             }
 
+            /*
             div#searchBox input {
                 height: 40px;
                 margin: 28px 0;
                 font-size: 1.5em;
             }
+
+            div#sourceBox input {
+                margin: 28px 0 0 0;
+            }
+
+            div#featureBox input {
+                margin: 0 0 28px 0; 
+            }
+            */
 
             .docDisplay {
                 position: relative;
@@ -62,7 +72,9 @@
             Ext.require(['*']);
 
             var documentStore;
+            var featureStore;
             var relevanceStore;
+            var sourceStore;
             
             function markRelevant(id) {
                 unmarkRelevance(id);
@@ -100,11 +112,44 @@
                 $('div.relevantDoc,div.irrelevantDoc').mouseleave(function() {
                     $(this).find('.remove').hide();
                 });
+
+                var params = buildParams();
+                params['page'] = 1;
+                params['start'] = 0;
+                params['limit'] = Math.max(25, documentStore.count());
+                documentStore.load({params: params, callback: onLoadCallback });
+            }
+
+            function syncFeatures(sourceName) {
+                var fStore = Ext.getCmp('featureBox').store;
+                fStore.load({params: { source: sourceName }});
+            }
+
+            function buildParams() {
+                var relevantIds = [];
+                var irrelevantIds = [];
+
+                var doc;
+                for(var i=0; i<relevanceStore.count(); i++) {
+                    doc = relevanceStore.getAt(i);
+                    if(doc.data.relevant)
+                        relevantIds.push(doc.data.id);
+                    else
+                        irrelevantIds.push(doc.data.id);
+                }
+
+                return {
+                    query: localStorage.query,
+                    source: Ext.getCmp('sourceBox').getValue(),
+                    feature: Ext.getCmp('featureBox').getValue(),
+                    relevant: relevantIds,
+                    irrelevant: irrelevantIds
+                }
             }
 
             Ext.onReady(function() {
 
-                Ext.define('Image', {
+                Ext.define('Document', {
                     extend: 'Ext.data.Model',
                     fields: [
                         {name: 'id', type: 'string'},
@@ -113,12 +158,27 @@
                     ],
                 });
 
+                Ext.define('Source', {
+                    extend: 'Ext.data.Model',
+                    fields: [
+                        {name: 'name', type: 'string'},
+                        {name: 'features', type: 'array'}
+                    ]
+                });
+
+                Ext.define('Feature', {
+                    extend: 'Ext.data.Model',
+                    fields: [
+                        {name: 'name', type: 'string'}
+                    ]
+                });
+
                 relevanceStore = new Ext.data.ArrayStore({
                     fields: ['id', 'resource_uri', 'relevant']
                 });
 
                 documentStore = new Ext.data.Store({
-                    model: 'Image',
+                    model: 'Document',
                     proxy: {
                         type: 'rest',
                         buildUrl: function(request) {
@@ -135,9 +195,49 @@
 
                 var searchStore = Ext.data.Store({
                     fields: ['query'],
-                    data: [
-                        
-                    ]
+                    data: [ ] });
+
+                sourceStore = Ext.data.Store({
+                    model: 'Source',
+                    proxy: {
+                        type: 'rest',
+                        buildUrl: function(request) {
+                            return 'api/v1/source/?format=json';
+                        },
+                        reader: {
+                            type: 'json',
+                            root: 'objects'
+                        }
+                    },
+                    autoLoad: true,
+                    listeners: {
+                        load: function(store) {
+                            Ext.getCmp('sourceBox').setValue(store.getAt(0));
+                        }
+                    }
+                });
+
+                featureStore = Ext.data.Store({
+                    model: 'Feature',
+                    proxy: {
+                        type: 'rest',
+                        buildUrl: function(request) {
+                            var src = request.params.source;
+                            if(!src)
+                                src = Ext.getCmp('sourceBox').getValue();
+                            delete request.params.source;
+                            return 'api/v1/source/'+src+'?format=json';
+                        },
+                        reader: {
+                            type: 'json',
+                            root: 'features'
+                        }
+                    },
+                    listeners: {
+                        load: function(store) {
+                            Ext.getCmp('featureBox').setValue(store.getAt(0));
+                        }
+                    }
                 });
 
                 var documentView = new Ext.DataView({
@@ -173,26 +273,65 @@
                             height: 100,
                             items: [
                                 {
-                                    xtype: 'combo',
-                                    id: 'searchBox',
-                                    width: 400,
-                                    style: 'margin: 0 auto; text-align: center;',
-                                    store: searchStore,
-                                    displayField: 'query',
-                                    valueField: 'query',
-                                    queryMode: 'local',
-                                    emptyText: 'Search...',
-                                    hideTrigger: true,
-                                    listeners: {
-                                        specialkey: function(f, e) {
-                                            if(e.getKey() == e.ENTER) {
-                                                var searchBox = Ext.getCmp('searchBox');
-                                                localStorage.query = searchBox.getValue();
-                                                documentStore.load({params: { query: localStorage.query }, callback: onLoadCallback});
-                                                searchBox.setValue('');
+                                    xtype: 'panel',
+                                    layout: {
+                                        type: 'table',
+                                        border: false,
+                                        columns: 2
+                                    },
+                                    items: [
+                                        {
+                                            xtype: 'combo',
+                                            id: 'searchBox',
+                                            colspan: 2,
+                                            width: 400,
+                                            //style: 'margin: 0 auto; text-align: center; float: left;',
+                                            store: searchStore,
+                                            displayField: 'query',
+                                            valueField: 'query',
+                                            queryMode: 'local',
+                                            emptyText: 'Search...',
+                                            hideTrigger: true,
+                                            listeners: {
+                                                specialkey: function(f, e) {
+                                                    if(e.getKey() == e.ENTER) {
+                                                        var searchBox = Ext.getCmp('searchBox');
+                                                        localStorage.query = searchBox.getValue();
+                                                        documentStore.load({params: buildParams(), callback: onLoadCallback});
+                                                        searchBox.setValue('');
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        {
+                                            xtype: 'combo',
+                                            id: 'sourceBox',
+                                            width: 200,
+                                            //style: 'margin: 0 auto;',
+                                            store: sourceStore,
+                                            displayField: 'name',
+                                            valueField: 'name',
+                                            listeners: {
+                                                change: function(combo) {
+                                                    syncFeatures(combo.getValue());
+                                                },
+                                                select: function(combo, selection) {
+                                                    // TODO: same as 'change?'
+                                                }
+                                            }
+                                        },
+                                        {
+                                            xtype: 'combo',
+                                            id: 'featureBox',
+                                            width: 200,
+                                            store: featureStore,
+                                            displayField: 'name',
+                                            valueField: 'name',
+                                            listeners: {
+
                                             }
                                         }
-                                    }
+                                    ]
                                 }
                             ]
                         },
@@ -222,7 +361,9 @@
                                 ),
                                 listeners: {
                                     refresh: function() {
-                                        onRelevanceChange();
+                                        var count = this.store.count();
+                                        if(count > 0 && this.store.getAt(count-1).data.relevant)
+                                            onRelevanceChange();
                                     }
                                 }
                             },
@@ -253,7 +394,9 @@
                                 ),
                                 listeners: {
                                     refresh: function() {
-                                        onRelevanceChange();
+                                        var count = this.store.count();
+                                        if(count > 0 && !this.store.getAt(count-1).data.relevant)
+                                            onRelevanceChange();
                                     }
                                 }
                             },
@@ -275,7 +418,7 @@
                                 afterrender: function(panel) {
                                     panel.body.on('scroll', function(scrollerObj, offsetObj) {
                                         if(scrollerObj.target.offsetHeight + scrollerObj.target.scrollTop >= scrollerObj.target.scrollHeight) {
-                                            documentStore.nextPage({ params: { query: localStorage.query }, addRecords: true, callback: onLoadCallback });
+                                            documentStore.nextPage({ params: buildParams(), addRecords: true, callback: onLoadCallback });
                                         }
                                     });
                                 }
@@ -285,7 +428,7 @@
                 });
 
                 if(localStorage.query)
-                    documentStore.load({params: { query: localStorage.query }, callback: onLoadCallback });
+                    documentStore.load({params: buildParams(), callback: onLoadCallback });
 
             });
         </script>
